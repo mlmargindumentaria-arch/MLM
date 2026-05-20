@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, "claude/ecommerce-visitor-tracking-YB7f5"]
+    branches: [main, "claude/ecommerce-visitor-tracking-YB7f5", "claude/transfer-repo-ownership-75TKY"]
   workflow_dispatch:
 
 permissions:
