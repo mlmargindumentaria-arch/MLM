@@ -44,34 +44,50 @@ export function AuthProvider({ children }) {
 
     // Supabase mode
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        await loadSupabaseProfile(session.user)
-      } else {
+      try {
+        if (session?.user) {
+          await loadSupabaseProfile(session.user)
+        } else {
+          setUser(null)
+          setRole(null)
+        }
+      } catch (e) {
+        console.warn('AuthContext: getSession profile load failed', e)
         setUser(null)
         setRole(null)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        await loadSupabaseProfile(session.user)
-      } else {
-        setUser(null)
-        setRole(null)
+      try {
+        if (session?.user) {
+          await loadSupabaseProfile(session.user)
+        } else {
+          setUser(null)
+          setRole(null)
+        }
+      } catch (e) {
+        console.warn('AuthContext: onAuthStateChange profile load failed', e)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
   async function loadSupabaseProfile(supabaseUser) {
-    const { data: profile } = await supabase
+    const { data: profile, error } = await supabase
       .from('profiles')
       .select('role, name')
       .eq('id', supabaseUser.id)
-      .single()
+      .maybeSingle()
+
+    if (error) {
+      console.warn('AuthContext: profiles query error:', error.message)
+    }
 
     const userObj = {
       id: supabaseUser.id,
@@ -98,19 +114,28 @@ export function AuthProvider({ children }) {
     }
 
     // Supabase mode
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      return {
-        success: false,
-        error: error.message === 'Invalid login credentials'
-          ? 'Email o contraseña incorrectos'
-          : error.message
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) {
+        return {
+          success: false,
+          error: error.message === 'Invalid login credentials'
+            ? 'Email o contraseña incorrectos'
+            : error.message
+        }
       }
+      if (data.user) {
+        try {
+          await loadSupabaseProfile(data.user)
+        } catch (e) {
+          console.warn('AuthContext: profile load after login failed', e)
+        }
+      }
+      return { success: true }
+    } catch (e) {
+      console.error('AuthContext: signInWithPassword threw', e)
+      return { success: false, error: 'No se pudo conectar al servidor. Reintentá en unos segundos.' }
     }
-    if (data.user) {
-      await loadSupabaseProfile(data.user)
-    }
-    return { success: true }
   }
 
   async function logout() {
